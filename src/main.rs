@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate clap;
 
-use gitlab::Gitlab;
+use std::fs::File;
+use std::io;
+use gitlab::{Gitlab, QueryParamSlice};
 
 #[derive(Clap, Debug)]
 #[clap(version = "1.0", author = "Éric BURGHARD")]
@@ -18,14 +20,14 @@ struct Opts {
 
 fn main() {
     let opts = Opts::parse();
-    let noparams = [];
+    let noparams = &[] as QueryParamSlice;
 
     let gitlab = match Gitlab::new(&opts.host, opts.token) {
     	Ok(gitlab) => gitlab,
     	Err(err) => panic!("error connecting to {}: {:?}", opts.host, err)
     };
 
-    let project = match gitlab.project_by_name(&opts.project, &noparams) {
+    let project = match gitlab.project_by_name(&opts.project, noparams) {
     	Ok(project) => {
     		println!("project {} has id {}", &opts.project, project.id.value());
     		project
@@ -33,7 +35,7 @@ fn main() {
     	Err(err) => panic!("error getting project {}: {:?}", opts.project, err)
     };
 
-    let branch = match gitlab.branch(project.id, &opts.branch, &noparams) {
+    let branch = match gitlab.branch(project.id, &opts.branch, noparams) {
         Ok(branch) => branch,
         Err(err) => panic!("error getting branch {} on project {}: {:?}", opts.branch, opts.project, err)
     };
@@ -44,5 +46,7 @@ fn main() {
     };
     println!("project {} branch {} last commit {}", opts.project, opts.branch, commit.id.value());
 
-    let _tar = gitlab.get_with_param("repository/archive.tar.gz", [("sha", commit.id.value())]);
+    let mut file = File::create("archive.tar.gz").unwrap();
+    let mut archive = gitlab.get_archive(project.id, commit).unwrap();
+    let _ = io::copy(&mut archive, &mut file);
 }
