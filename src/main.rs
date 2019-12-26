@@ -1,33 +1,33 @@
 #[macro_use]
 extern crate clap;
 
-use std::collections::HashMap;
-use std::fs::{File, create_dir};
-use std::path::Path;
-use std::io;
-use gitlab::{Gitlab, QueryParamSlice};
-use serde::Deserialize;
 use bytesize::ByteSize;
 use flate2::read::GzDecoder;
+use gitlab::{Gitlab, QueryParamSlice};
+use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs::{create_dir, File};
+use std::io;
+use std::path::Path;
 use tar::{Archive, EntryType};
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Éric BURGHARD")]
 struct Opts {
-	#[clap(short = "c", long = "config")]
+    #[clap(short = "c", long = "config")]
     config: String,
     #[clap(short = "v", long = "verbose", parse(from_occurrences))]
     verbose: i32,
     #[clap(subcommand)]
-    subcmd: SubCommand
+    subcmd: SubCommand,
 }
 
 #[derive(Clap)]
 enum SubCommand {
-    #[clap(name="get")]
+    #[clap(name = "get")]
     Get(Get),
-    #[clap(name="print")]
-    Print
+    #[clap(name = "print")]
+    Print,
 }
 
 #[derive(Clap)]
@@ -35,14 +35,14 @@ struct Get {
     #[clap(short = "s", long = "strip-components", default_value = "0")]
     strip: String,
     #[clap(short = "d", long = "dir")]
-    dir: Option<String>
+    dir: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct Config {
     host: String,
     token: String,
-    archives: HashMap<String, String>
+    archives: HashMap<String, String>,
 }
 
 fn main() {
@@ -50,26 +50,24 @@ fn main() {
 
     let file = match File::open(&opts.config) {
         Ok(file) => file,
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err)
+        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err),
     };
 
     let config: Config = match serde_yaml::from_reader(file) {
         Ok(config) => config,
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err)
+        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err),
     };
 
     let gitlab = match Gitlab::new(&config.host, &config.token) {
-    	Ok(gitlab) => gitlab,
-    	Err(err) => panic!("error connecting to {}: {:?}", &config.host, &err)
+        Ok(gitlab) => gitlab,
+        Err(err) => panic!("error connecting to {}: {:?}", &config.host, &err),
     };
 
     let noparams = &[] as QueryParamSlice;
     for (prj, br) in config.archives.iter() {
         let project = match gitlab.project_by_name(&prj, noparams) {
-        	Ok(project) => {
-        		project
-        	},
-        	Err(err) => {
+            Ok(project) => project,
+            Err(err) => {
                 eprintln!("error getting project {}: {:?}", &prj, &err);
                 continue;
             }
@@ -78,7 +76,10 @@ fn main() {
         let branch = match gitlab.branch(project.id, &br, noparams) {
             Ok(branch) => branch,
             Err(err) => {
-                eprintln!("error getting branch {} on project {}: {:?}", &br, &prj, &err);
+                eprintln!(
+                    "error getting branch {} on project {}: {:?}",
+                    &br, &prj, &err
+                );
                 continue;
             }
         };
@@ -91,27 +92,26 @@ fn main() {
             }
         };
 
-
         match &opts.subcmd {
             SubCommand::Get(args) => {
                 let dir = match &args.dir {
                     Some(dir) => {
                         let path = Path::new(dir);
-                        if ! path.exists() {
+                        if !path.exists() {
                             match create_dir(&path) {
                                 Ok(()) => {
                                     if opts.verbose != 0 {
                                         println!("creating dir {:?}", &path);
                                     }
-                                },
+                                }
                                 Err(err) => {
                                     panic!("error creating dir {:?}: {:?}", &path, &err);
                                 }
                             }
                         };
                         path
-                    },
-                    None => Path::new("")
+                    }
+                    None => Path::new(""),
                 };
                 let targz = match gitlab.get_archive(project.id, commit) {
                     Ok(archive) => archive,
@@ -128,7 +128,10 @@ fn main() {
                     let mut entry = match entry {
                         Ok(entry) => entry,
                         Err(err) => {
-                            eprintln!("  error getting {} arquive entry: {:?}", &project.name, &err);
+                            eprintln!(
+                                "  error getting {} arquive entry: {:?}",
+                                &project.name, &err
+                            );
                             continue;
                         }
                     };
@@ -137,7 +140,7 @@ fn main() {
                     let mut components = path.components();
                     let strip = match args.strip.parse::<u8>() {
                         Ok(strip) => strip,
-                        Err(_) => 0
+                        Err(_) => 0,
                     };
                     for _ in 0..strip {
                         components.next();
@@ -161,26 +164,28 @@ fn main() {
                             match io::copy(&mut entry, &mut file) {
                                 Ok(size) => {
                                     if opts.verbose != 0 {
-                                        println!("  {:?} extracted ({})", &dest_path, ByteSize(size));
+                                        println!(
+                                            "  {:?} extracted ({})",
+                                            &dest_path,
+                                            ByteSize(size)
+                                        );
                                     }
-                                },
+                                }
                                 Err(err) => {
                                     eprintln!("  error extracting {:?}: {:?}", &dest_path, &err);
                                     continue;
                                 }
                             }
-                        },
-                        EntryType::Directory => {
-                            match create_dir(&dest_path) {
-                                Ok(()) => {
-                                    if opts.verbose != 0 {
-                                        println!("  {:?} created", &dest_path);
-                                    }
-                                },
-                                Err(err) => {
-                                    eprintln!("  error creating dir {:?}: {:?}", &dest_path, &err);
-                                    continue;
+                        }
+                        EntryType::Directory => match create_dir(&dest_path) {
+                            Ok(()) => {
+                                if opts.verbose != 0 {
+                                    println!("  {:?} created", &dest_path);
                                 }
+                            }
+                            Err(err) => {
+                                eprintln!("  error creating dir {:?}: {:?}", &dest_path, &err);
+                                continue;
                             }
                         },
                         _ => {
@@ -189,13 +194,11 @@ fn main() {
                         }
                     }
                 }
-
-            },
+            }
 
             SubCommand::Print => {
                 println!("{}:{}", &prj, commit.id.value());
             }
         }
     }
-
 }
