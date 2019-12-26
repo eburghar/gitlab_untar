@@ -5,16 +5,16 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use gitlab::{Gitlab, QueryParamSlice};
-use serde::{Serialize, Deserialize};
+use serde::Deserialize;
 
-#[derive(Clap, Debug)]
+#[derive(Clap)]
 #[clap(version = "1.0", author = "Éric BURGHARD")]
 struct Opts {
 	#[clap(short = "c", long = "config")]
     config: String
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize)]
 struct Config {
     host: String,
     token: String,
@@ -63,13 +63,13 @@ fn main() {
         let commit = match branch.commit {
             Some(commit) => commit,
             None => {
-                println!("no commit for project {}", prj);
+                println!("no commit for project {}", &prj);
                 continue;
             }
         };
-        println!("project {} branch {} last commit {}", prj, br, commit.id.value());
+        println!("project {} branch {} last commit {}", &prj, &br, commit.id.value());
 
-        let mut file = File::create(format!("{}-{}.tar.gz", project.name, br)).unwrap();
+        let mut file = File::create(format!("{}-{}.tar.gz", &project.name, &br)).unwrap();
         let mut archive = gitlab.get_archive(project.id, commit).unwrap();
         let _ = io::copy(&mut archive, &mut file);
     }
