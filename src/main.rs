@@ -3,6 +3,7 @@ extern crate clap;
 
 use std::collections::HashMap;
 use std::fs::{File, create_dir};
+use std::path::Path;
 use std::io;
 use gitlab::{Gitlab, QueryParamSlice};
 use serde::Deserialize;
@@ -90,8 +91,28 @@ fn main() {
             }
         };
 
+
         match &opts.subcmd {
             SubCommand::Get(args) => {
+                let dir = match &args.dir {
+                    Some(dir) => {
+                        let path = Path::new(dir);
+                        if ! path.exists() {
+                            match create_dir(&path) {
+                                Ok(()) => {
+                                    if opts.verbose != 0 {
+                                        println!("creating dir {:?}", &path);
+                                    }
+                                },
+                                Err(err) => {
+                                    panic!("error creating dir {:?}: {:?}", &path, &err);
+                                }
+                            }
+                        };
+                        path
+                    },
+                    None => Path::new("")
+                };
                 let targz = match gitlab.get_archive(project.id, commit) {
                     Ok(archive) => archive,
                     Err(err) => {
@@ -100,6 +121,7 @@ fn main() {
                     }
                 };
 
+                println!("extracting branch {} of project {}", &br, &prj);
                 let tar = GzDecoder::new(targz);
                 let mut arquive = Archive::new(tar);
                 for entry in arquive.entries().unwrap() {
@@ -110,6 +132,7 @@ fn main() {
                             continue;
                         }
                     };
+
                     let path = entry.path().unwrap().into_owned();
                     let mut components = path.components();
                     let strip = match args.strip.parse::<u8>() {
@@ -123,6 +146,7 @@ fn main() {
                     if dest_path.to_string_lossy().is_empty() {
                         continue;
                     }
+                    let dest_path = dir.join(dest_path);
 
                     let file_type = entry.header().entry_type();
                     match file_type {
