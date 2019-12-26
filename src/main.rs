@@ -128,7 +128,7 @@ fn main() {
                     let mut entry = match entry {
                         Ok(entry) => entry,
                         Err(err) => {
-                            eprintln!("error getting {} arquive entry: {:?}", &project.name, &err);
+                            eprintln!("  error getting {} arquive entry: {:?}", &project.name, &err);
                             continue;
                         }
                     };
@@ -154,18 +154,18 @@ fn main() {
                             let mut file = match File::create(&dest_path) {
                                 Ok(file) => file,
                                 Err(err) => {
-                                    eprintln!("error creating file {:?}: {:?}", &dest_path, &err);
+                                    eprintln!("  error creating file {:?}: {:?}", &dest_path, &err);
                                     continue;
                                 }
                             };
                             match io::copy(&mut entry, &mut file) {
                                 Ok(size) => {
                                     if opts.verbose != 0 {
-                                        println!("{:?} extracted ({})", &dest_path, ByteSize(size));
+                                        println!("  {:?} extracted ({})", &dest_path, ByteSize(size));
                                     }
                                 },
                                 Err(err) => {
-                                    eprintln!("error extracting {:?}: {:?}", &dest_path, &err);
+                                    eprintln!("  error extracting {:?}: {:?}", &dest_path, &err);
                                     continue;
                                 }
                             }
@@ -174,17 +174,18 @@ fn main() {
                             match create_dir(&dest_path) {
                                 Ok(()) => {
                                     if opts.verbose != 0 {
-                                        println!("{:?} created", &dest_path);
+                                        println!("  {:?} created", &dest_path);
                                     }
                                 },
                                 Err(err) => {
-                                    eprintln!("error creating dir {:?}: {:?}", &dest_path, &err);
+                                    eprintln!("  error creating dir {:?}: {:?}", &dest_path, &err);
                                     continue;
                                 }
                             }
                         },
                         _ => {
-                            eprintln!("{:?} ({:?}) ignored", &dest_path, &file_type);
+                            eprintln!("  {:?} ({:?}) ignored", &dest_path, &file_type);
+                            continue;
                         }
                     }
                 }
