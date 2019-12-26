@@ -37,17 +37,17 @@ fn main() {
 
     let file = match File::open(&opts.config) {
         Ok(file) => file,
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, err)
+        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err)
     };
 
     let config: Config = match serde_yaml::from_reader(file) {
         Ok(config) => config,
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, err)
+        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err)
     };
 
     let gitlab = match Gitlab::new(&config.host, &config.token) {
     	Ok(gitlab) => gitlab,
-    	Err(err) => panic!("error connecting to {}: {:?}", &config.host, err)
+    	Err(err) => panic!("error connecting to {}: {:?}", &config.host, &err)
     };
 
     let noparams = &[] as QueryParamSlice;
@@ -57,7 +57,7 @@ fn main() {
         		project
         	},
         	Err(err) => {
-                eprintln!("error getting project {}: {:?}", &prj, err);
+                eprintln!("error getting project {}: {:?}", &prj, &err);
                 continue;
             }
         };
@@ -65,7 +65,7 @@ fn main() {
         let branch = match gitlab.branch(project.id, &br, noparams) {
             Ok(branch) => branch,
             Err(err) => {
-                eprintln!("error getting branch {} on project {}: {:?}", &br, &prj, err);
+                eprintln!("error getting branch {} on project {}: {:?}", &br, &prj, &err);
                 continue;
             }
         };
