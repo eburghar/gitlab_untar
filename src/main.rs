@@ -2,17 +2,21 @@
 extern crate clap;
 
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{File, create_dir};
 use std::io;
 use gitlab::{Gitlab, QueryParamSlice};
 use serde::Deserialize;
 use bytesize::ByteSize;
+use flate2::read::GzDecoder;
+use tar::{Archive, EntryType};
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Éric BURGHARD")]
 struct Opts {
 	#[clap(short = "c", long = "config")]
     config: String,
+    #[clap(short = "v", long = "verbose", parse(from_occurrences))]
+    verbose: i32,
     #[clap(subcommand)]
     subcmd: SubCommand
 }
@@ -20,9 +24,17 @@ struct Opts {
 #[derive(Clap)]
 enum SubCommand {
     #[clap(name="get")]
-    Get,
+    Get(Get),
     #[clap(name="print")]
     Print
+}
+
+#[derive(Clap)]
+struct Get {
+    #[clap(short = "s", long = "strip-components", default_value = "0")]
+    strip: String,
+    #[clap(short = "d", long = "dir")]
+    dir: Option<String>
 }
 
 #[derive(Deserialize)]
@@ -79,31 +91,80 @@ fn main() {
         };
 
         match &opts.subcmd {
-            SubCommand::Get => {
-                let archive_name = format!("{}-{}.tar.gz", &project.name, &br);
-                let mut file = match File::create(&archive_name) {
-                    Ok(file) => file,
-                    Err(err) => {
-                        eprintln!("error creating {}: {:?}", &archive_name, &err);
-                        continue;
-                    }
-                };
-                let mut archive = match gitlab.get_archive(project.id, commit) {
+            SubCommand::Get(args) => {
+                let targz = match gitlab.get_archive(project.id, commit) {
                     Ok(archive) => archive,
                     Err(err) => {
-                        eprintln!("error getting {} archive: {:?}", &archive_name, &err);
+                        eprintln!("error getting {} archive: {:?}", &project.name, &err);
                         continue;
                     }
                 };
-                match io::copy(&mut archive, &mut file) {
-                    Ok(size) => {
-                        println!("{} downloaded ({})", &archive_name, ByteSize(size));
-                    },
-                    Err(err) => {
-                        eprintln!("error getting {} archive: {:?}", &archive_name, &err);
+
+                let tar = GzDecoder::new(targz);
+                let mut arquive = Archive::new(tar);
+                for entry in arquive.entries().unwrap() {
+                    let mut entry = match entry {
+                        Ok(entry) => entry,
+                        Err(err) => {
+                            eprintln!("error getting {} arquive entry: {:?}", &project.name, &err);
+                            continue;
+                        }
+                    };
+                    let path = entry.path().unwrap().into_owned();
+                    let mut components = path.components();
+                    let strip = match args.strip.parse::<u8>() {
+                        Ok(strip) => strip,
+                        Err(_) => 0
+                    };
+                    for _ in 0..strip {
+                        components.next();
+                    }
+                    let dest_path = components.as_path();
+                    if dest_path.to_string_lossy().is_empty() {
                         continue;
                     }
+
+                    let file_type = entry.header().entry_type();
+                    match file_type {
+                        EntryType::Regular => {
+                            let mut file = match File::create(&dest_path) {
+                                Ok(file) => file,
+                                Err(err) => {
+                                    eprintln!("error creating file {:?}: {:?}", &dest_path, &err);
+                                    continue;
+                                }
+                            };
+                            match io::copy(&mut entry, &mut file) {
+                                Ok(size) => {
+                                    if opts.verbose != 0 {
+                                        println!("{:?} extracted ({})", &dest_path, ByteSize(size));
+                                    }
+                                },
+                                Err(err) => {
+                                    eprintln!("error extracting {:?}: {:?}", &dest_path, &err);
+                                    continue;
+                                }
+                            }
+                        },
+                        EntryType::Directory => {
+                            match create_dir(&dest_path) {
+                                Ok(()) => {
+                                    if opts.verbose != 0 {
+                                        println!("{:?} created", &dest_path);
+                                    }
+                                },
+                                Err(err) => {
+                                    eprintln!("error creating dir {:?}: {:?}", &dest_path, &err);
+                                    continue;
+                                }
+                            }
+                        },
+                        _ => {
+                            eprintln!("{:?} ({:?}) ignored", &dest_path, &file_type);
+                        }
+                    }
                 }
+
             },
 
             SubCommand::Print => {
