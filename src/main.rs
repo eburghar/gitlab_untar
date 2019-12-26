@@ -6,12 +6,23 @@ use std::fs::File;
 use std::io;
 use gitlab::{Gitlab, QueryParamSlice};
 use serde::Deserialize;
+use bytesize::ByteSize;
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Éric BURGHARD")]
 struct Opts {
 	#[clap(short = "c", long = "config")]
-    config: String
+    config: String,
+    #[clap(subcommand)]
+    subcmd: SubCommand
+}
+
+#[derive(Clap)]
+enum SubCommand {
+    #[clap(name="get")]
+    Get,
+    #[clap(name="print")]
+    Print
 }
 
 #[derive(Deserialize)]
@@ -25,13 +36,13 @@ fn main() {
     let opts = Opts::parse();
 
     let file = match File::open(&opts.config) {
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, err),
-        Ok(file) => file
+        Ok(file) => file,
+        Err(err) => panic!("error reading {}: {:?}", &opts.config, err)
     };
 
     let config: Config = match serde_yaml::from_reader(file) {
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, err),
-        Ok(config) => config
+        Ok(config) => config,
+        Err(err) => panic!("error reading {}: {:?}", &opts.config, err)
     };
 
     let gitlab = match Gitlab::new(&config.host, &config.token) {
@@ -43,11 +54,10 @@ fn main() {
     for (prj, br) in config.archives.iter() {
         let project = match gitlab.project_by_name(&prj, noparams) {
         	Ok(project) => {
-        		println!("project {} has id {}", &prj, project.id.value());
         		project
         	},
         	Err(err) => {
-                println!("error getting project {}: {:?}", &prj, err);
+                eprintln!("error getting project {}: {:?}", &prj, err);
                 continue;
             }
         };
@@ -55,7 +65,7 @@ fn main() {
         let branch = match gitlab.branch(project.id, &br, noparams) {
             Ok(branch) => branch,
             Err(err) => {
-                println!("error getting branch {} on project {}: {:?}", &br, &prj, err);
+                eprintln!("error getting branch {} on project {}: {:?}", &br, &prj, err);
                 continue;
             }
         };
@@ -63,15 +73,43 @@ fn main() {
         let commit = match branch.commit {
             Some(commit) => commit,
             None => {
-                println!("no commit for project {}", &prj);
+                eprintln!("no commit for project {}", &prj);
                 continue;
             }
         };
-        println!("project {} branch {} last commit {}", &prj, &br, commit.id.value());
 
-        let mut file = File::create(format!("{}-{}.tar.gz", &project.name, &br)).unwrap();
-        let mut archive = gitlab.get_archive(project.id, commit).unwrap();
-        let _ = io::copy(&mut archive, &mut file);
+        match &opts.subcmd {
+            SubCommand::Get => {
+                let archive_name = format!("{}-{}.tar.gz", &project.name, &br);
+                let mut file = match File::create(&archive_name) {
+                    Ok(file) => file,
+                    Err(err) => {
+                        eprintln!("error creating {}: {:?}", &archive_name, &err);
+                        continue;
+                    }
+                };
+                let mut archive = match gitlab.get_archive(project.id, commit) {
+                    Ok(archive) => archive,
+                    Err(err) => {
+                        eprintln!("error getting {} archive: {:?}", &archive_name, &err);
+                        continue;
+                    }
+                };
+                match io::copy(&mut archive, &mut file) {
+                    Ok(size) => {
+                        println!("{} downloaded ({})", &archive_name, ByteSize(size));
+                    },
+                    Err(err) => {
+                        eprintln!("error getting {} archive: {:?}", &archive_name, &err);
+                        continue;
+                    }
+                }
+            },
+
+            SubCommand::Print => {
+                println!("{}:{}", &prj, commit.id.value());
+            }
+        }
     }
 
 }

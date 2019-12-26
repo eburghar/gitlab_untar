@@ -11,3 +11,4 @@ gitlab = { path = "../rust-gitlab" }
 clap = { path = "../clap" }
 serde = "1.0"
 serde_yaml = "0.8"
+bytesize = "1.0.0"
