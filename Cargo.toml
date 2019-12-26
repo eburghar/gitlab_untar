@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 gitlab = { path = "../rust-gitlab" }
 clap = { path = "../clap" }
+serde = "1.0"
+serde_yaml = "0.8"
