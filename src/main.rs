@@ -70,7 +70,7 @@ fn main() {
 
     // create the dest directory if using get subcommand
     // and save as an Option<Path> for later use
-    let dir = match &opts.subcmd {
+    let dest_dir = match &opts.subcmd {
         SubCommand::Get(args) => match &args.dir {
             Some(dir) => {
                 let path = Path::new(dir);
@@ -186,7 +186,7 @@ fn main() {
                         continue;
                     }
                     // append destination dir to entry path
-                    entry_path = dir.unwrap().join(entry_path);
+                    entry_path = dest_dir.unwrap().join(entry_path);
 
                     // get the entry type
                     let file_type = entry.header().entry_type();
