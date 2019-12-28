@@ -36,8 +36,8 @@ struct Get {
     strip: String,
     #[clap(short = "d", long = "dir")]
     dir: Option<String>,
-    #[clap(short = "k", long = "clean", parse(from_occurrences))]
-    clean: u8,
+    #[clap(short = "k", long = "keep", parse(from_occurrences))]
+    keep: u8,
 }
 
 #[derive(Deserialize)]
@@ -75,7 +75,7 @@ fn main() {
             Some(dir) => {
                 let path = Path::new(dir);
                 // remove destination dir if requested
-                if args.clean > 0 {
+                if args.keep == 0 {
                     if path.exists() {
                         match remove_dir_all(&path) {
                             Ok(()) => {
@@ -141,6 +141,12 @@ fn main() {
         match &opts.subcmd {
             // in get mode extract archive to specified directory
             SubCommand::Get(args) => {
+                // skip archive request if a dir already exists with the name of the project
+                if (args.keep > 0) & dest_dir.unwrap().join(&project.name).exists() {
+                    println!("{} already extracted", &project.name);
+                    continue;
+                }
+
                 // get the archive.tar.gz from project branch last commit
                 let targz = match gitlab.get_archive(project.id, commit) {
                     Ok(archive) => archive,
@@ -154,6 +160,7 @@ fn main() {
                 // chain gzip reader and arquive reader
                 let tar = GzDecoder::new(targz);
                 let mut arquive = Archive::new(tar);
+
                 // for each entry in the arquive
                 for entry in arquive.entries().unwrap() {
                     let mut entry = match entry {
@@ -187,10 +194,30 @@ fn main() {
                     }
                     // append destination dir to entry path
                     entry_path = dest_dir.unwrap().join(entry_path);
-
                     // get the entry type
                     let file_type = entry.header().entry_type();
                     match file_type {
+                        // if it's a directory, create it if doesn't exist
+                        EntryType::Directory => {
+                            if !entry_path.exists() {
+                                match create_dir(&entry_path) {
+                                    Ok(()) => {
+                                        if opts.verbose != 0 {
+                                            println!("  {}", &entry_path.to_string_lossy());
+                                        }
+                                    }
+                                    Err(err) => {
+                                        eprintln!(
+                                            "  error creating dir {}: {:?}",
+                                            &entry_path.to_string_lossy(),
+                                            &err
+                                        );
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+
                         // if it's a file, extract it to local filesystem
                         EntryType::Regular => {
                             let mut file = match File::create(&entry_path) {
@@ -224,22 +251,6 @@ fn main() {
                                 }
                             }
                         }
-                        // if it's a directory, create it
-                        EntryType::Directory => match create_dir(&entry_path) {
-                            Ok(()) => {
-                                if opts.verbose != 0 {
-                                    println!("  {}", &entry_path.to_string_lossy());
-                                }
-                            }
-                            Err(err) => {
-                                eprintln!(
-                                    "  error creating dir {}: {:?}",
-                                    &entry_path.to_string_lossy(),
-                                    &err
-                                );
-                                continue;
-                            }
-                        },
                         // TODO: support other types (links)
                         _ => {
                             eprintln!(
