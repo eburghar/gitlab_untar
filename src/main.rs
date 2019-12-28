@@ -13,7 +13,7 @@ use tar::{Archive, EntryType};
 
 #[derive(Clap)]
 #[clap(
-    version = "1.0",
+    version = "1.0.0",
     author = "Éric BURGHARD",
     about = "Extract latest projects archives from a gitlab server"
 )]
