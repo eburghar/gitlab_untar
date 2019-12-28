@@ -12,32 +12,49 @@ use std::path::Path;
 use tar::{Archive, EntryType};
 
 #[derive(Clap)]
-#[clap(version = "1.0", author = "Éric BURGHARD")]
+#[clap(
+    version = "1.0",
+    author = "Éric BURGHARD",
+    about = "Extract latest projects archives from a gitlab server"
+)]
 struct Opts {
-    #[clap(short = "c", long = "config")]
+    #[clap(
+        short = "c",
+        long = "config",
+        help = "Configuration file containing projects and gitlab connection parameters"
+    )]
     config: String,
-    #[clap(short = "v", long = "verbose", parse(from_occurrences))]
-    verbose: i32,
+    #[clap(short = "v", long = "verbose", help = "More detailed output")]
+    verbose: bool,
     #[clap(subcommand)]
     subcmd: SubCommand,
 }
 
 #[derive(Clap)]
 enum SubCommand {
-    #[clap(name = "get")]
+    #[clap(name = "get", about = "Get and extract archives")]
     Get(Get),
-    #[clap(name = "print")]
+    #[clap(name = "print", about = "Print latest commit hash")]
     Print,
 }
 
 #[derive(Clap)]
 struct Get {
-    #[clap(short = "s", long = "strip-components", default_value = "0")]
+    #[clap(
+        short = "s",
+        long = "strip-components",
+        default_value = "0",
+        help = "Strip first path components of every entries in archive before extraction"
+    )]
     strip: String,
-    #[clap(short = "d", long = "dir")]
+    #[clap(short = "d", long = "dir", help = "Destination directory")]
     dir: Option<String>,
-    #[clap(short = "k", long = "keep", parse(from_occurrences))]
-    keep: u8,
+    #[clap(
+        short = "k",
+        long = "keep",
+        help = "Skip extraction of projects if a directory with same name already exists. by default destination directory is removed before extraction"
+    )]
+    keep: bool,
 }
 
 #[derive(Deserialize)]
@@ -75,11 +92,11 @@ fn main() {
             Some(dir) => {
                 let path = Path::new(dir);
                 // remove destination dir if requested
-                if args.keep == 0 {
+                if !args.keep {
                     if path.exists() {
                         match remove_dir_all(&path) {
                             Ok(()) => {
-                                if opts.verbose != 0 {
+                                if opts.verbose {
                                     println!("{} removed", &dir)
                                 }
                             }
@@ -91,7 +108,7 @@ fn main() {
                 if !path.exists() {
                     match create_dir(&path) {
                         Ok(()) => {
-                            if opts.verbose != 0 {
+                            if opts.verbose {
                                 println!("creating dir {}", &dir);
                             }
                         }
@@ -142,7 +159,7 @@ fn main() {
             // in get mode extract archive to specified directory
             SubCommand::Get(args) => {
                 // skip archive request if a dir already exists with the name of the project
-                if (args.keep > 0) & dest_dir.unwrap().join(&project.name).exists() {
+                if args.keep & dest_dir.unwrap().join(&project.name).exists() {
                     println!("{} already extracted", &project.name);
                     continue;
                 }
@@ -202,7 +219,7 @@ fn main() {
                             if !entry_path.exists() {
                                 match create_dir(&entry_path) {
                                     Ok(()) => {
-                                        if opts.verbose != 0 {
+                                        if opts.verbose {
                                             println!("  {}", &entry_path.to_string_lossy());
                                         }
                                     }
@@ -233,7 +250,7 @@ fn main() {
                             };
                             match io::copy(&mut entry, &mut file) {
                                 Ok(size) => {
-                                    if opts.verbose != 0 {
+                                    if opts.verbose {
                                         println!(
                                             "  {} ({})",
                                             &entry_path.to_string_lossy(),
