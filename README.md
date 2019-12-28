@@ -50,10 +50,10 @@ with a given token and extract the latest archive.tar.gz of a given branch.
 
 The config file looks like
 
-'''yaml
+```yaml
 host: git.mydomain.com
 token: xxxxxxxxxx 
 archives:
   namespace1/project1: 'branch1'
   namespace2/project2: 'branch2'
-'''
+```
