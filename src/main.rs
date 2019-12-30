@@ -75,15 +75,15 @@ fn get_project(gitlab: &Gitlab, prj: &str, br: &str) -> Result<ProjectBranch> {
     // get project definition from project name
     let project = gitlab
         .project_by_name(&prj, noparams)
-        .with_context(|| format!("error getting project {}", &prj))?;
+        .with_context(|| format!("Can't get project {}", &prj))?;
     // get indicated branch
     let branch = gitlab
         .branch(project.id, &br, noparams)
-        .with_context(|| format!("error getting branch {} on project {}", &br, &prj))?;
+        .with_context(|| format!("Can't get branch {} of project {}", &br, &prj))?;
     // get last commmit of the branch
     let commit = branch
         .commit
-        .with_context(|| format!("no commit for project {}", &prj))?;
+        .with_context(|| format!("No commit for project {}", &prj))?;
 
     Ok(ProjectBranch {
         project: project,
@@ -95,22 +95,13 @@ fn main() -> Result<()> {
     let opts = Opts::parse();
 
     // open configuration file
-    let file = match File::open(&opts.config) {
-        Ok(file) => file,
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err),
-    };
-
+    let file = File::open(&opts.config).with_context(|| format!("Can't open {}", &opts.config))?;
     // deserialize configuration
-    let config: Config = match serde_yaml::from_reader(file) {
-        Ok(config) => config,
-        Err(err) => panic!("error reading {}: {:?}", &opts.config, &err),
-    };
-
+    let config: Config =
+        serde_yaml::from_reader(file).with_context(|| format!("Can't read {}", &opts.config))?;
     // connect to gitlab instance using host and token from config file
-    let gitlab = match Gitlab::new(&config.host, &config.token) {
-        Ok(gitlab) => gitlab,
-        Err(err) => panic!("error connecting to {}: {:?}", &config.host, &err),
-    };
+    let gitlab = Gitlab::new(&config.host, &config.token)
+        .with_context(|| format!("Can't connect to {}", &config.host))?;
 
     // create the dest directory if using get subcommand
     // and save as an Option<Path> for later use
@@ -119,27 +110,19 @@ fn main() -> Result<()> {
             Some(dir) => {
                 let path = Path::new(dir);
                 // remove destination dir if requested
-                if !args.keep {
-                    if path.exists() {
-                        match remove_dir_all(&path) {
-                            Ok(()) => {
-                                if opts.verbose {
-                                    println!("{} removed", &dir)
-                                }
-                            }
-                            Err(err) => panic!("error removing {}: {:?}", &dir, &err),
-                        }
+                if !args.keep & path.exists() {
+                    let _ = remove_dir_all(&path)
+                        .with_context(|| format!("Can't remove dir {}", &dir))?;
+                    if opts.verbose {
+                        println!("{} removed", &dir)
                     }
                 }
                 // create destination dir if necessary
                 if !path.exists() {
-                    match create_dir(&path) {
-                        Ok(()) => {
-                            if opts.verbose {
-                                println!("creating dir {}", &dir);
-                            }
-                        }
-                        Err(err) => panic!("error creating dir {}: {:?}", &dir, &err),
+                    let _ =
+                        create_dir(&path).with_context(|| format!("Can't create dir {}", &dir))?;
+                    if opts.verbose {
+                        println!("creating dir {}", &dir);
                     }
                 }
                 Some(path)
@@ -154,7 +137,7 @@ fn main() -> Result<()> {
         match &opts.subcmd {
             // in get mode extract archive to specified directory
             SubCommand::Get(args) => {
-                // skip archive request if a dir already exists with the name of the project
+                // skip gitlab requests and extraction if a dir with the name of the project already exists
                 let i = match prj.rfind('/') {
                     Some(i) if (i + 1) < prj.len() => i + 1,
                     _ => 0,
@@ -181,7 +164,7 @@ fn main() -> Result<()> {
                 let targz = match gitlab.get_archive(project.id, commit) {
                     Ok(archive) => archive,
                     Err(err) => {
-                        eprintln!("error getting {} archive: {:?}", &project.name, &err);
+                        eprintln!("Can't get {} archive: {:?}", &project.name, &err);
                         continue;
                     }
                 };
@@ -196,10 +179,7 @@ fn main() -> Result<()> {
                     let mut entry = match entry {
                         Ok(entry) => entry,
                         Err(err) => {
-                            eprintln!(
-                                "  error getting {} arquive entry: {:?}",
-                                &project.name, &err
-                            );
+                            eprintln!("  Can't get {} arquive entry: {:?}", &project.name, &err);
                             continue;
                         }
                     };
@@ -238,7 +218,7 @@ fn main() -> Result<()> {
                                     }
                                     Err(err) => {
                                         eprintln!(
-                                            "  error creating dir {}: {:?}",
+                                            "  Can't create dir {}: {:?}",
                                             &entry_path.to_string_lossy(),
                                             &err
                                         );
@@ -254,7 +234,7 @@ fn main() -> Result<()> {
                                 Ok(file) => file,
                                 Err(err) => {
                                     eprintln!(
-                                        "  error creating file {}: {:?}",
+                                        "  Can't create file {}: {:?}",
                                         &entry_path.to_string_lossy(),
                                         &err
                                     );
@@ -273,7 +253,7 @@ fn main() -> Result<()> {
                                 }
                                 Err(err) => {
                                     eprintln!(
-                                        "  error extracting {}: {:?}",
+                                        "  Can't extract {}: {:?}",
                                         &entry_path.to_string_lossy(),
                                         &err
                                     );
