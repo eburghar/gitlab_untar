@@ -1,9 +1,10 @@
 #[macro_use]
 extern crate clap;
 
+use anyhow::{Context, Result};
 use bytesize::ByteSize;
 use flate2::read::GzDecoder;
-use gitlab::{Gitlab, QueryParamSlice};
+use gitlab::{Gitlab, Project, QueryParamSlice, RepoCommit};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::{create_dir, remove_dir_all, File};
@@ -64,7 +65,33 @@ struct Config {
     archives: HashMap<String, String>,
 }
 
-fn main() {
+struct ProjectBranch {
+    project: Project,
+    commit: RepoCommit,
+}
+
+fn get_project(gitlab: &Gitlab, prj: &str, br: &str) -> Result<ProjectBranch> {
+    let noparams = &[] as QueryParamSlice;
+    // get project definition from project name
+    let project = gitlab
+        .project_by_name(&prj, noparams)
+        .with_context(|| format!("error getting project {}", &prj))?;
+    // get indicated branch
+    let branch = gitlab
+        .branch(project.id, &br, noparams)
+        .with_context(|| format!("error getting branch {} on project {}", &br, &prj))?;
+    // get last commmit of the branch
+    let commit = branch
+        .commit
+        .with_context(|| format!("no commit for project {}", &prj))?;
+
+    Ok(ProjectBranch {
+        project: project,
+        commit: commit,
+    })
+}
+
+fn main() -> Result<()> {
     let opts = Opts::parse();
 
     // open configuration file
@@ -122,47 +149,33 @@ fn main() {
         _ => None,
     };
 
-    let noparams = &[] as QueryParamSlice;
     // iterate over each project name indicated in the config file
     for (prj, br) in config.archives.iter() {
-        // get project definition from project name
-        let project = match gitlab.project_by_name(&prj, noparams) {
-            Ok(project) => project,
-            Err(err) => {
-                eprintln!("error getting project {}: {:?}", &prj, &err);
-                continue;
-            }
-        };
-
-        // get indicated branch
-        let branch = match gitlab.branch(project.id, &br, noparams) {
-            Ok(branch) => branch,
-            Err(err) => {
-                eprintln!(
-                    "error getting branch {} on project {}: {:?}",
-                    &br, &prj, &err
-                );
-                continue;
-            }
-        };
-
-        // get last commmit of the branch
-        let commit = match branch.commit {
-            Some(commit) => commit,
-            None => {
-                eprintln!("no commit for project {}", &prj);
-                continue;
-            }
-        };
-
         match &opts.subcmd {
             // in get mode extract archive to specified directory
             SubCommand::Get(args) => {
                 // skip archive request if a dir already exists with the name of the project
-                if args.keep & dest_dir.unwrap().join(&project.name).exists() {
-                    println!("{} already extracted", &project.name);
+                let i = match prj.rfind('/') {
+                    Some(i) if (i + 1) < prj.len() => i + 1,
+                    _ => 0,
+                };
+                if args.keep & dest_dir.unwrap().join(&prj[i..]).exists() {
+                    println!("{} already extracted", &prj);
                     continue;
+                } else {
+                    println!("{}", &prj[i..]);
                 }
+
+                let proj = match get_project(&gitlab, &prj, &br) {
+                    Ok(proj) => proj,
+                    Err(err) => {
+                        eprintln!("{}", &err);
+                        continue;
+                    }
+                };
+
+                let project = proj.project;
+                let commit = proj.commit;
 
                 // get the archive.tar.gz from project branch last commit
                 let targz = match gitlab.get_archive(project.id, commit) {
@@ -283,8 +296,10 @@ fn main() {
 
             // if print mode just print project path and last commit hash
             SubCommand::Print => {
-                println!("{}:{}", &prj, commit.id.value());
+                let proj = get_project(&gitlab, &prj, &br)?;
+                println!("{}:{}", &prj, proj.commit.id.value());
             }
         }
     }
+    Ok(())
 }
