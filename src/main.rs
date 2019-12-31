@@ -103,14 +103,14 @@ fn main() -> Result<()> {
     let gitlab = Gitlab::new(&config.host, &config.token)
         .with_context(|| format!("Can't connect to {}", &config.host))?;
 
-    // create the dest directory if using get subcommand
-    // and save as an Option<Path> for later use
+    // create the dest directory and save as an Option<Path> for later use
     let dest_dir = match &opts.subcmd {
+        // if using get subcommand
         SubCommand::Get(args) => match &args.dir {
             Some(dir) => {
                 let path = Path::new(dir);
                 // remove destination dir if requested
-                if !args.keep & path.exists() {
+                if !args.keep && path.exists() {
                     let _ = remove_dir_all(&path)
                         .with_context(|| format!("Can't remove dir {}", &dir))?;
                     if opts.verbose {
@@ -129,6 +129,7 @@ fn main() -> Result<()> {
             }
             None => Some(Path::new("")),
         },
+        // otherwise do nothing
         _ => None,
     };
 
@@ -142,11 +143,9 @@ fn main() -> Result<()> {
                     Some(i) if (i + 1) < prj.len() => i + 1,
                     _ => 0,
                 };
-                if args.keep & dest_dir.unwrap().join(&prj[i..]).exists() {
+                if args.keep && dest_dir.unwrap().join(&prj[i..]).exists() {
                     println!("{} already extracted", &prj);
                     continue;
-                } else {
-                    println!("{}", &prj[i..]);
                 }
 
                 let proj = match get_project(&gitlab, &prj, &br) {
@@ -188,7 +187,7 @@ fn main() -> Result<()> {
                     let mut entry_path = entry.path().unwrap().into_owned();
                     // turn into components
                     let mut components = entry_path.components();
-                    // remove first components if indicated in command line args
+                    // skip first components if indicated in command line args
                     if let Ok(strip) = args.strip.parse::<u8>() {
                         if strip > 0 {
                             for _ in 0..strip {
