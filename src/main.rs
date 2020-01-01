@@ -1,8 +1,6 @@
-#[macro_use]
-extern crate clap;
-
 use anyhow::{Context, Result};
 use bytesize::ByteSize;
+use clap::Clap;
 use flate2::read::GzDecoder;
 use gitlab::{Gitlab, Project, QueryParamSlice, RepoCommit};
 use serde::Deserialize;
@@ -91,14 +89,20 @@ fn get_project(gitlab: &Gitlab, prj: &str, br: &str) -> Result<ProjectBranch> {
     })
 }
 
+fn get_config(config: &str) -> Result<Config> {
+    // open configuration file
+    let file = File::open(&config).with_context(|| format!("Can't open {}", &config))?;
+    // deserialize configuration
+    let config: Config =
+        serde_yaml::from_reader(file).with_context(|| format!("Can't read {}", &config))?;
+    Ok(config)
+}
+
 fn main() -> Result<()> {
     let opts = Opts::parse();
 
-    // open configuration file
-    let file = File::open(&opts.config).with_context(|| format!("Can't open {}", &opts.config))?;
-    // deserialize configuration
-    let config: Config =
-        serde_yaml::from_reader(file).with_context(|| format!("Can't read {}", &opts.config))?;
+    // get config value in a struct
+    let config = get_config(&opts.config)?;
     // connect to gitlab instance using host and token from config file
     let gitlab = Gitlab::new(&config.host, &config.token)
         .with_context(|| format!("Can't connect to {}", &config.host))?;
