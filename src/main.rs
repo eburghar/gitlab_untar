@@ -83,10 +83,7 @@ fn get_project(gitlab: &Gitlab, prj: &str, br: &str) -> Result<ProjectBranch> {
         .commit
         .with_context(|| format!("No commit for project {}", &prj))?;
 
-    Ok(ProjectBranch {
-        project: project,
-        commit: commit,
-    })
+    Ok(ProjectBranch { project, commit })
 }
 
 fn get_config(config: &str) -> Result<Config> {
@@ -115,16 +112,14 @@ fn main() -> Result<()> {
                 let path = Path::new(dir);
                 // remove destination dir if requested
                 if !args.keep && path.exists() {
-                    let _ = remove_dir_all(&path)
-                        .with_context(|| format!("Can't remove dir {}", &dir))?;
+                    remove_dir_all(&path).with_context(|| format!("Can't remove dir {}", &dir))?;
                     if opts.verbose {
                         println!("{} removed", &dir)
                     }
                 }
                 // create destination dir if necessary
                 if !path.exists() {
-                    let _ =
-                        create_dir(&path).with_context(|| format!("Can't create dir {}", &dir))?;
+                    create_dir(&path).with_context(|| format!("Can't create dir {}", &dir))?;
                     if opts.verbose {
                         println!("creating dir {}", &dir);
                     }
