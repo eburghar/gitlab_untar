@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io;
-use std::path::Path;
+use std::path::PathBuf;
 use tar::{Archive, EntryType};
 
 #[derive(Clap)]
@@ -95,6 +95,30 @@ fn get_config(config: &str) -> Result<Config> {
     Ok(config)
 }
 
+fn get_or_create_dir(subcmd: &SubCommand, verbose: bool) -> Result<Option<PathBuf>> {
+    if let SubCommand::Get(args) = subcmd {
+        if let Some(dir) = &args.dir {
+            let path = PathBuf::from(dir);
+            // remove destination dir if requested
+            if !args.keep && path.exists() {
+                remove_dir_all(&path).with_context(|| format!("Can't remove dir {}", &dir))?;
+                if verbose {
+                    println!("{} removed", &dir)
+                }
+            }
+            // create destination dir if necessary
+            if !path.exists() {
+                create_dir(&path).with_context(|| format!("Can't create dir {}", &dir))?;
+                if verbose {
+                    println!("creating dir {}", &dir);
+                }
+            }
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
 fn main() -> Result<()> {
     let opts = Opts::parse();
 
@@ -103,34 +127,8 @@ fn main() -> Result<()> {
     // connect to gitlab instance using host and token from config file
     let gitlab = Gitlab::new(&config.host, &config.token)
         .with_context(|| format!("Can't connect to {}", &config.host))?;
-
     // create the dest directory and save as an Option<Path> for later use
-    let dest_dir = match &opts.subcmd {
-        // if using get subcommand
-        SubCommand::Get(args) => match &args.dir {
-            Some(dir) => {
-                let path = Path::new(dir);
-                // remove destination dir if requested
-                if !args.keep && path.exists() {
-                    remove_dir_all(&path).with_context(|| format!("Can't remove dir {}", &dir))?;
-                    if opts.verbose {
-                        println!("{} removed", &dir)
-                    }
-                }
-                // create destination dir if necessary
-                if !path.exists() {
-                    create_dir(&path).with_context(|| format!("Can't create dir {}", &dir))?;
-                    if opts.verbose {
-                        println!("creating dir {}", &dir);
-                    }
-                }
-                Some(path)
-            }
-            None => Some(Path::new("")),
-        },
-        // otherwise do nothing
-        _ => None,
-    };
+    let dest_dir = get_or_create_dir(&opts.subcmd, opts.verbose)?.unwrap();
 
     // iterate over each project name indicated in the config file
     for (prj, br) in config.archives.iter() {
@@ -142,7 +140,7 @@ fn main() -> Result<()> {
                     Some(i) if (i + 1) < prj.len() => i + 1,
                     _ => 0,
                 };
-                if args.keep && dest_dir.unwrap().join(&prj[i..]).exists() {
+                if args.keep && dest_dir.join(&prj[i..]).exists() {
                     println!("{} already extracted", &prj);
                     continue;
                 }
@@ -201,7 +199,7 @@ fn main() -> Result<()> {
                         continue;
                     }
                     // append destination dir to entry path
-                    entry_path = dest_dir.unwrap().join(entry_path);
+                    entry_path = dest_dir.join(entry_path);
                     // get the entry type
                     let file_type = entry.header().entry_type();
                     match file_type {
