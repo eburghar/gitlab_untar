@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
+use argh::FromArgs;
 use bytesize::ByteSize;
-use clap::Clap;
 use flate2::read::GzDecoder;
 use gitlab::{Gitlab, Project, QueryParamSlice, RepoCommit};
 use serde::Deserialize;
@@ -10,51 +10,45 @@ use std::io;
 use std::path::PathBuf;
 use tar::{Archive, EntryType};
 
-#[derive(Clap)]
-#[clap(
-    version = "1.0.0",
-    author = "Éric BURGHARD",
-    about = "Extract latest projects archives from a gitlab server"
-)]
+#[derive(FromArgs)]
+/// Extract latest projects archives from a gitlab server
 struct Opts {
-    #[clap(
-        short = "c",
-        long = "config",
-        help = "Configuration file containing projects and gitlab connection parameters"
-    )]
+    #[argh(option, short = 'c')]
+    /// configuration file containing projects and gitlab connection parameters
     config: String,
-    #[clap(short = "v", long = "verbose", help = "More detailed output")]
+    #[argh(switch, short = 'v')]
+    /// more detailed output
     verbose: bool,
-    #[clap(subcommand)]
+    #[argh(subcommand)]
     subcmd: SubCommand,
 }
 
-#[derive(Clap)]
+#[derive(FromArgs)]
+#[argh(subcommand)]
 enum SubCommand {
-    #[clap(name = "get", about = "Get and extract archives")]
     Get(Get),
-    #[clap(name = "print", about = "Print latest commit hash")]
-    Print,
+    Print(Print),
 }
 
-#[derive(Clap)]
+#[derive(FromArgs)]
+/// Get and extract archives
+#[argh(subcommand, name = "get")]
 struct Get {
-    #[clap(
-        short = "s",
-        long = "strip-components",
-        default_value = "0",
-        help = "Strip first path components of every entries in archive before extraction"
-    )]
-    strip: String,
-    #[clap(short = "d", long = "dir", help = "Destination directory")]
+    #[argh(option, short = 's', default = "0")]
+    /// strip first path components of every entries in archive before extraction
+    strip: u8,
+    #[argh(option, short = 'd')]
+    /// destination directory
     dir: Option<String>,
-    #[clap(
-        short = "k",
-        long = "keep",
-        help = "Skip extraction of projects if a directory with same name already exists. by default destination directory is removed before extraction"
-    )]
+    #[argh(switch, short = 'k')]
+    /// skip extraction of projects if a directory with same name already exists. by default destination directory is removed before extraction
     keep: bool,
 }
+
+#[derive(FromArgs)]
+/// Print latest commit hash
+#[argh(subcommand, name = "print")]
+struct Print {}
 
 #[derive(Deserialize)]
 struct Config {
@@ -120,7 +114,7 @@ fn get_or_create_dir(subcmd: &SubCommand, verbose: bool) -> Result<Option<PathBu
 }
 
 fn main() -> Result<()> {
-    let opts = Opts::parse();
+    let opts: Opts = argh::from_env();
 
     // get config value in a struct
     let config = get_config(&opts.config)?;
@@ -185,15 +179,13 @@ fn main() -> Result<()> {
                     // turn into components
                     let mut components = entry_path.components();
                     // skip first components if indicated in command line args
-                    if let Ok(strip) = args.strip.parse::<u8>() {
-                        if strip > 0 {
-                            for _ in 0..strip {
-                                components.next();
-                            }
-                            // and reassemble dest_path
-                            entry_path = components.as_path().to_path_buf();
+                    if args.strip > 0 {
+                        for _ in 0..args.strip {
+                            components.next();
                         }
-                    };
+                        // and reassemble dest_path
+                        entry_path = components.as_path().to_path_buf();
+                    }
                     // don't do anything if empty path
                     if entry_path.to_string_lossy().is_empty() {
                         continue;
@@ -271,7 +263,7 @@ fn main() -> Result<()> {
             }
 
             // if print mode just print project path and last commit hash
-            SubCommand::Print => {
+            SubCommand::Print(_args) => {
                 let proj = get_project(&gitlab, &prj, &br)?;
                 println!("{}:{}", &prj, proj.commit.id.value());
             }
