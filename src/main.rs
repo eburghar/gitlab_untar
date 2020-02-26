@@ -4,7 +4,7 @@ use bytesize::ByteSize;
 use flate2::read::GzDecoder;
 use gitlab::{Gitlab, Project, QueryParamSlice, RepoCommit};
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io;
 use std::path::PathBuf;
@@ -54,7 +54,7 @@ struct Print {}
 struct Config {
     host: String,
     token: String,
-    archives: HashMap<String, String>,
+    archives: BTreeMap<String, String>,
 }
 
 struct ProjectBranch {
