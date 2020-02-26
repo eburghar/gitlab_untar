@@ -1,25 +1,19 @@
 # General use
 
 ```
-gitlab_untar 1.0
-Éric BURGHARD
+Usage: gitlab_untar -c <config> [-v] <command> [<args>]
+
 Extract latest projects archives from a gitlab server
 
-USAGE:
-    gitlab_untar [FLAGS] --config <config> <SUBCOMMAND>
+Options:
+  -c, --config      configuration file containing projects and gitlab connection
+                    parameters
+  -v, --verbose     more detailed output
+  --help            display usage information
 
-FLAGS:
-    -h, --help       Prints help information
-    -v, --verbose    More detailed output
-    -V, --version    Prints version information
-
-OPTIONS:
-    -c, --config <config>    Configuration file containing projects and gitlab connection parameters
-
-SUBCOMMANDS:
-    get      Get and extract archives
-    help     Prints this message or the help of the given subcommand(s)
-    print    Print latest commit hash
+Commands:
+  get               Get and extract archives
+  print             Print latest commit hash
 ```
 
 # Print mode
@@ -30,19 +24,18 @@ with a given token and print the latest commit hash of a given branch.
 # Get mode
 
 ```
-USAGE:
-    gitlab_untar --config <config> get [FLAGS] [OPTIONS]
+Usage: gitlab_untar get [-s <strip>] [-d <dir>] [-k]
 
-FLAGS:
-    -h, --help       Prints help information
-    -k, --keep       Skip extraction of projects if a directory with same name already exists. by default destination
-                     directory is removed before extraction
-    -V, --version    Prints version information
+Get and extract archives
 
-OPTIONS:
-    -d, --dir <dir>                   Destination directory
-    -s, --strip-components <strip>    Strip first path components of every entries in archive before extraction
-                                      [default: 0]
+Options:
+  -s, --strip       strip first path components of every entries in archive
+                    before extraction
+  -d, --dir         destination directory
+  -k, --keep        skip extraction of projects if a directory with same name
+                    already exists. by default destination directory is removed
+                    before extraction
+  --help            display usage information
 ```
 
 For each projects specified in the config file, connect to a gitlab instance
