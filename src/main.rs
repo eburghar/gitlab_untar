@@ -43,6 +43,9 @@ struct Get {
     #[argh(switch, short = 'k')]
     /// skip extraction of projects if a directory with same name already exists. by default destination directory is removed before extraction
     keep: bool,
+    #[argh(switch, short = 'u')]
+    /// update if possible
+    update: bool,
 }
 
 #[derive(FromArgs)]
@@ -89,6 +92,26 @@ fn get_config(config: &str) -> Result<Config> {
     Ok(config)
 }
 
+fn get_lock(lock: &str) -> Result<Option<BTreeMap<String, String>>> {
+    // open lock file
+    if let Ok(file) = File::open(&lock) {
+        // deserialize lock
+        let lock: BTreeMap<String, String> =
+            serde_yaml::from_reader(file).with_context(|| format!("Can't read {}", &lock))?;
+        Ok(Some(lock))
+    } else {
+        Ok(None)
+    }
+}
+
+fn save_lock(lock: &str, commits: BTreeMap<String, String>) -> Result<()> {
+    // open lock file
+    if let Ok(file) = File::create(&lock) {
+        serde_yaml::to_writer(file, &commits).with_context(|| format!("Can't write {}", &lock))?;
+    }
+    Ok(())
+}
+
 fn get_or_create_dir(dir: &String, keep: bool, verbose: bool) -> Result<Option<PathBuf>> {
     let path = PathBuf::from(dir);
     // remove destination dir if requested
@@ -112,6 +135,8 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
     if let SubCommand::Get(args) = &opts.subcmd {
         // create the dest directory and save as an Option<Path> for later use
         let dest_dir = get_or_create_dir(&args.dir, args.keep, opts.verbose)?.unwrap();
+        // create the lock tree
+        let mut lock = BTreeMap::new();
 
         // in get modextract archive to specified directory
         // iterate over each project name indicated in the config file
@@ -136,6 +161,8 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
 
             let project = proj.project;
             let commit = proj.commit;
+            // insert the commit name in the dictionnary
+            lock.insert(prj.clone(), commit.id.value().clone());
 
             // get the archive.tar.gz from project branch last commit
             let targz = match gitlab.get_archive(project.id, commit) {
@@ -248,6 +275,7 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                 }
             }
         }
+        save_lock("packages.lock", lock)?;
     }
 
     Ok(())
