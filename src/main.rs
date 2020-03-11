@@ -92,12 +92,13 @@ fn get_config(config: &str) -> Result<Config> {
     Ok(config)
 }
 
-fn get_lock(lock: &str) -> Result<BTreeMap<String, String>> {
+fn get_lock(config: &str) -> Result<BTreeMap<String, String>> {
     // open lock file
+    let lock = Path::new(config).with_extension("lock");
     if let Ok(file) = File::open(&lock) {
         // deserialize lock
         let commits: BTreeMap<String, String> =
-            serde_yaml::from_reader(file).with_context(|| format!("Can't read {}", &lock))?;
+            serde_yaml::from_reader(file).with_context(|| format!("Can't read {:?}", &lock))?;
         Ok(commits)
     } else {
         // create empty commits list
@@ -106,12 +107,13 @@ fn get_lock(lock: &str) -> Result<BTreeMap<String, String>> {
     }
 }
 
-fn save_lock(lock: &str, update: bool, commits: &BTreeMap<String, String>) -> Result<()> {
+fn save_lock(config: &str, update: bool, commits: &BTreeMap<String, String>) -> Result<()> {
     // save lock file if update mode or file doesn't exists
+    let lock = Path::new(config).with_extension("lock");
     if update || !Path::new(&lock).exists() {
         if let Ok(file) = File::create(&lock) {
             serde_yaml::to_writer(file, &commits)
-                .with_context(|| format!("Can't write {}", &lock))?;
+                .with_context(|| format!("Can't write {:?}", &lock))?;
         }
     }
     Ok(())
@@ -146,7 +148,7 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
         // create the dest directory and save as an Option<Path> for later use
         let dest_dir = get_or_create_dir(&args.dir, args.keep, args.update, opts.verbose)?.unwrap();
         // get previous commits from lock file or empty list
-        let mut lock = get_lock("packages.lock")?;
+        let mut lock = get_lock(&opts.config)?;
 
         // in get modextract archive to specified directory
         // iterate over each project name indicated in the config file
@@ -176,13 +178,17 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
             let project = proj.project;
             let last_commit = proj.commit.id.value();
             // get locked_commit or last_commit
+            let mut found = false;
             let mut commit = match lock.get(prj) {
-                Some(locked_commit) => locked_commit.to_string(),
+                Some(locked_commit) => {
+                    found = true;
+                    locked_commit.to_string()
+                }
                 None => last_commit.to_string(),
             };
 
             if args.update && is_extracted {
-                if commit == *last_commit {
+                if found && commit == *last_commit {
                     println!("{}-{} already extracted", prj, commit);
                     continue;
                 } else {
@@ -308,7 +314,7 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                 .and_modify(|e| *e = commit.clone())
                 .or_insert(commit.clone());
         }
-        save_lock("packages.lock", args.update, &lock)?;
+        save_lock(&opts.config, args.update, &lock)?;
     }
 
     Ok(())
