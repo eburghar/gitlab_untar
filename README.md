@@ -35,6 +35,7 @@ Options:
   -k, --keep        skip extraction of projects if a directory with same name
                     already exists. by default destination directory is removed
                     before extraction
+  -u, --update      update based on packages.lock
   --help            display usage information
 ```
 

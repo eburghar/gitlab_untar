@@ -44,7 +44,7 @@ struct Get {
     /// skip extraction of projects if a directory with same name already exists. by default destination directory is removed before extraction
     keep: bool,
     #[argh(switch, short = 'u')]
-    /// update if possible
+    /// update based on packages.lock file
     update: bool,
 }
 
