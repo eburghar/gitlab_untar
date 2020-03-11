@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fs::{create_dir, remove_dir_all, File};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tar::{Archive, EntryType};
 
 #[derive(FromArgs)]
@@ -92,30 +92,40 @@ fn get_config(config: &str) -> Result<Config> {
     Ok(config)
 }
 
-fn get_lock(lock: &str) -> Result<Option<BTreeMap<String, String>>> {
+fn get_lock(lock: &str) -> Result<BTreeMap<String, String>> {
     // open lock file
     if let Ok(file) = File::open(&lock) {
         // deserialize lock
-        let lock: BTreeMap<String, String> =
+        let commits: BTreeMap<String, String> =
             serde_yaml::from_reader(file).with_context(|| format!("Can't read {}", &lock))?;
-        Ok(Some(lock))
+        Ok(commits)
     } else {
-        Ok(None)
+        // create empty commits list
+        let commits: BTreeMap<String, String> = BTreeMap::new();
+        Ok(commits)
     }
 }
 
-fn save_lock(lock: &str, commits: BTreeMap<String, String>) -> Result<()> {
-    // open lock file
-    if let Ok(file) = File::create(&lock) {
-        serde_yaml::to_writer(file, &commits).with_context(|| format!("Can't write {}", &lock))?;
+fn save_lock(lock: &str, update: bool, commits: &BTreeMap<String, String>) -> Result<()> {
+    // save lock file if update mode or file doesn't exists
+    if update || !Path::new(&lock).exists() {
+        if let Ok(file) = File::create(&lock) {
+            serde_yaml::to_writer(file, &commits)
+                .with_context(|| format!("Can't write {}", &lock))?;
+        }
     }
     Ok(())
 }
 
-fn get_or_create_dir(dir: &String, keep: bool, verbose: bool) -> Result<Option<PathBuf>> {
+fn get_or_create_dir(
+    dir: &String,
+    keep: bool,
+    update: bool,
+    verbose: bool,
+) -> Result<Option<PathBuf>> {
     let path = PathBuf::from(dir);
     // remove destination dir if requested
-    if !keep && path.exists() {
+    if !keep && !update && path.exists() {
         remove_dir_all(&path).with_context(|| format!("Can't remove dir {}", &dir))?;
         if verbose {
             println!("{} removed", &dir)
@@ -134,9 +144,9 @@ fn get_or_create_dir(dir: &String, keep: bool, verbose: bool) -> Result<Option<P
 fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
     if let SubCommand::Get(args) = &opts.subcmd {
         // create the dest directory and save as an Option<Path> for later use
-        let dest_dir = get_or_create_dir(&args.dir, args.keep, opts.verbose)?.unwrap();
-        // create the lock tree
-        let mut lock = BTreeMap::new();
+        let dest_dir = get_or_create_dir(&args.dir, args.keep, args.update, opts.verbose)?.unwrap();
+        // get previous commits from lock file or empty list
+        let mut lock = get_lock("packages.lock")?;
 
         // in get modextract archive to specified directory
         // iterate over each project name indicated in the config file
@@ -146,7 +156,9 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                 Some(i) if (i + 1) < prj.len() => i + 1,
                 _ => 0,
             };
-            if args.keep && dest_dir.join(&prj[i..]).exists() {
+            let is_extracted = dest_dir.join(&prj[i..]).exists();
+            // skip before any API call in keep mode
+            if args.keep && is_extracted {
                 println!("{} already extracted", &prj);
                 continue;
             }
@@ -160,12 +172,24 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
             };
 
             let project = proj.project;
-            let commit = proj.commit;
-            // insert the commit name in the dictionnary
-            lock.insert(prj.clone(), commit.id.value().clone());
+            let last_commit = proj.commit.id.value();
+            // get locked_commit or last_commit
+            let mut commit = match lock.get(prj) {
+                Some(locked_commit) => locked_commit.to_string(),
+                None => last_commit.to_string(),
+            };
+
+            if args.update && is_extracted {
+                if commit == *last_commit {
+                    println!("{}-{} already extracted", prj, commit);
+                    continue;
+                } else {
+                    commit = last_commit.to_string();
+                }
+            }
 
             // get the archive.tar.gz from project branch last commit
-            let targz = match gitlab.get_archive(project.id, commit) {
+            let targz = match gitlab.get_archive(project.id, &commit) {
                 Ok(archive) => archive,
                 Err(err) => {
                     eprintln!("Can't get {} archive: {:?}", &project.name, &err);
@@ -274,8 +298,12 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                     }
                 }
             }
+            // insert the commit name in the dictionnary
+            lock.entry(prj.clone())
+                .and_modify(|e| *e = commit.clone())
+                .or_insert(commit.clone());
         }
-        save_lock("packages.lock", lock)?;
+        save_lock("packages.lock", args.update, &lock)?;
     }
 
     Ok(())
