@@ -156,7 +156,9 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                 Some(i) if (i + 1) < prj.len() => i + 1,
                 _ => 0,
             };
-            let is_extracted = dest_dir.join(&prj[i..]).exists();
+            let prj_dir = dest_dir.join(&prj[i..]);
+            let is_extracted = prj_dir.exists();
+
             // skip before any API call in keep mode
             if args.keep && is_extracted {
                 println!("{} already extracted", &prj);
@@ -184,6 +186,9 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                     println!("{}-{} already extracted", prj, commit);
                     continue;
                 } else {
+                    // remove project dir before update
+                    remove_dir_all(&prj_dir)
+                        .with_context(|| format!("Can't remove dir {}", prj_dir.display()))?;
                     commit = last_commit.to_string();
                 }
             }
@@ -207,7 +212,7 @@ fn cmd_get(gitlab: &Gitlab, config: &Config, opts: &Opts) -> Result<()> {
                 let mut entry = match entry {
                     Ok(entry) => entry,
                     Err(err) => {
-                        eprintln!("  Can't get {} arquive entry: {:?}", &project.name, &err);
+                        eprintln!("  Can't get {} archive entry: {:?}", &project.name, &err);
                         continue;
                     }
                 };
