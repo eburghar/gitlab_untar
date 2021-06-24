@@ -25,7 +25,7 @@ pub enum SubCommand {
 #[argh(subcommand, name = "get")]
 pub struct Get {
     #[argh(option, short = 's', default = "0")]
-    /// strip first path components of every entries in archive before extraction
+    /// strip first n path components of every entries in archive before extraction
     pub strip: u8,
     #[argh(option, short = 'd', default = "\"tmp\".to_string()")]
     /// destination directory
