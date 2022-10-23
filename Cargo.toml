@@ -2,7 +2,7 @@
 name = "gitlab_untar"
 version = "1.1.4"
 authors = ["Éric BURGHARD <eric.burghard@solarsis.co.ao>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,7 +11,10 @@ anyhow = "1.0"
 argh = "0.1"
 bytesize = "1.0.0"
 flate2 = "1.0"
-gitlab = { path = "../rust-gitlab" }
+gitlab = "0.1208.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
 tar = "0.4"
+
+[patch.crates-io]
+gitlab = { path = "../rust-gitlab" }
