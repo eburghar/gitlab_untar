@@ -1,5 +1,7 @@
 # gitlab_untar
 
+This project has been replaced by [gltctl](https://github.com/eburghar/glctl.git).
+
 gitlab_untar allows you to get and extract projects archives from a gitlab instance whithout having to install git
 or a shell or any toolchain (npm, pypi, ...), greatly reducing the surface attack and the execution speed. It's
 specially usefull in containers that needs to specialize (really quickly) at initialization and extract a defined
